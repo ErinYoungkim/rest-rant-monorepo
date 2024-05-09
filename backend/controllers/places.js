@@ -1,21 +1,22 @@
 const router = require('express').Router()
 const db = require("../models")
+const jwt = require("json-web-token")
 
 const { Place, Comment, User } = db
 
-router.post('/', async (req, res) => {
+router.post("/", async (req, res) => {
     if (!req.body.pic) {
-        req.body.pic = 'http://placekitten.com/400/400'
+      req.body.pic = "http://placekitten.com/400/400";
     }
     if (!req.body.city) {
-        req.body.city = 'Anytown'
+      req.body.city = "Anytown";
     }
     if (!req.body.state) {
-        req.body.state = 'USA'
+      req.body.state = "USA";
     }
-    const place = await Place.create(req.body)
-    res.json(place)
-})
+    const place = await Place.create(req.body);
+    res.json(place);
+  });
 
 
 router.get('/', async (req, res) => {
@@ -82,36 +83,52 @@ router.delete('/:placeId', async (req, res) => {
 })
 
 router.post('/:placeId/comments', async (req, res) => {
-    const placeId = Number(req.params.placeId)
+    console.log(req.body, req.headers)
+    const placeId = Number(req.params.placeId); 
 
-    req.body.rant = req.body.rant ? true : false
+    req.body.rant = req.body.rant ? true : false;
 
     const place = await Place.findOne({
         where: { placeId: placeId }
-    })
+    });
 
     if (!place) {
-        res.status(404).json({ message: `Could not find place with id "${placeId}"` })
+        return res.status(404).json({ message: `Could not find with id "${placeId}"`});
     }
 
-    const author = await User.findOne({
-        where: { userId: req.body.authorId }
-    })
-
-    if (!author) {
-        res.status(404).json({ message: `Could not find author with id "${req.body.authorId}"` })
+    let currentUser;
+    try {
+        const [ method, token ] = req.headers.authorization.split(' '); 
+        if (method === 'Bearer') {
+            const result = await jwt.decode(process.env.JWT_SECRET, token); 
+            const { id } = result.value;
+            currentUser = await User.findOne ({
+                where: {
+                    userId: id
+                }
+            });
+        }
+    } catch (error) {
+        res.json(null);
     }
 
-    const comment = await Comment.create({
+    if (!currentUser){
+        return res.status(404).json ({
+            message: `You must be logged in to leave a rant or rave.`
+        })
+    }
+
+    const comment = await Comment.create ({
         ...req.body,
+        authorId: currentUser.userId,
         placeId: placeId
-    })
+    });
 
-    res.send({
+    res.send ({
         ...comment.toJSON(),
-        author
-    })
-})
+        author: currentUser
+    });
+});
 
 router.delete('/:placeId/comments/:commentId', async (req, res) => {
     let placeId = Number(req.params.placeId)
